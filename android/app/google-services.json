@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "655728394377",
+    "project_id": "amanshu-notes",
+    "storage_bucket": "amanshu-notes.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:655728394377:android:d671ac120ed08404568658",
+        "android_client_info": {
+          "package_name": "com.example.mynotes"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "655728394377-gfitt1pjn1mb4t0vge5b0d57s3k04c87.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCZk0kmUESFQ8nDaPAoj2do6P3z1VfIysM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "655728394377-gfitt1pjn1mb4t0vge5b0d57s3k04c87.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
