@@ -19,6 +19,7 @@ void main() {
     routes: {
       '/login':(context) => const LoginView(),
       '/register':(context) => const RegisterView(),
+      '/notes':(context) => const NotesView(),
     },
   )
   );
@@ -80,7 +81,7 @@ class HomePage extends StatelessWidget {
                    devtools.log(shouldLogout.toString());
                    if(shouldLogout){
                      await FirebaseAuth.instance.signOut();
-                     Navigator.of(context).pushNamedAndRemoveUntil('/login/', (_) => false,);
+                     Navigator.of(context).pushReplacementNamed('/login');
                    }
                }
              },
