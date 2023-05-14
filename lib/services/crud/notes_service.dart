@@ -1,19 +1,52 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' show join;
 import 'package:mynotes/services/crud/crud_exceptions.dart';
 
- class NotesService{
+   class NotesService{
 
+   List <DatabaseNote> _notes = [];
+
+   static final NotesService _shared = NotesService._sharedInstance();
+   NotesService._sharedInstance();
+   factory NotesService() => _shared;
+
+   final _notesStreamController = StreamController<List<DatabaseNote>>.broadcast();
+
+   Stream <List<DatabaseNote>> get allNotes => _notesStreamController.stream;
+
+   Future<DatabaseUser> getOrCreateUser ({required String email}) async{
+
+     try{
+       final user = await getUser(email: email);
+       return user;
+     }
+     on couldNotFindUser{
+       final createdUser = await createUser(email: email);
+       return createdUser;
+     } catch (e){
+       rethrow;
+     }
+   }
+
+   Future<void> _cacheNotes() async{
+     final allNotes = await getAllNote();
+     _notes = allNotes.toList();
+     _notesStreamController.add(_notes);
+
+   }
    Database?_db;
 
    Future <DatabaseNote> updateNote({required DatabaseNote note,required String text}) async {
-
+     await _ensureDbIsOpen();
      final db = _getDatabaseOrThrow();
 
+     // make sure note exist
      await getNote(id: note.id);
-     
+
+     // update db
      final  updateCount = await db.update(notesTable, {
 
        textColumn : text,
@@ -24,11 +57,16 @@ import 'package:mynotes/services/crud/crud_exceptions.dart';
        throw couldNotUpdateNote();
      }
      else {
-       return await getNote(id: note.id);
+       final updatedNote = await getNote(id: note.id);
+       _notes.removeWhere((note) => note.id == updatedNote.id);
+       _notes.add(updatedNote);
+       _notesStreamController.add(_notes);
+       return updatedNote;
      }
    }
 
    Future <Iterable<DatabaseNote>> getAllNote () async{
+     await _ensureDbIsOpen();
      final db = _getDatabaseOrThrow();
      final notes = await db.query(notesTable);
      return notes.map((noteRow) => DatabaseNote.fromRow(noteRow));
@@ -36,6 +74,7 @@ import 'package:mynotes/services/crud/crud_exceptions.dart';
 
    Future <DatabaseNote> getNote ({required int id}) async{
 
+     await _ensureDbIsOpen();
      final db = _getDatabaseOrThrow();
      final notes = await db.query(notesTable,limit: 1,where: 'id = ?',whereArgs: [id]);
 
@@ -43,27 +82,42 @@ import 'package:mynotes/services/crud/crud_exceptions.dart';
        throw couldNotFindNote();
      }
      else{
-       return DatabaseNote.fromRow(notes.first);
+       final note = DatabaseNote.fromRow(notes.first);
+       // removing old note from cache whose id is equal to note
+       _notes.removeWhere((note) => note.id == id);
+       // updating note
+       _notes.add(note);
+       _notesStreamController.add(_notes);
+       return note;
      }
    }
 
    Future <int> deleteAllNotes () async{
-
+     await _ensureDbIsOpen();
      final db = _getDatabaseOrThrow();
-     return await db.delete(notesTable);
+     final numberOfDeletions = await db.delete(notesTable);
+     _notes = [];
+     _notesStreamController.add(_notes);
+     return numberOfDeletions;
    }
 
    Future <void> deleteNote({required int id}) async {
+     await _ensureDbIsOpen();
      final db = _getDatabaseOrThrow();
      final deletedCount = await db.delete(notesTable,where: 'id = ?',whereArgs: [id],);
 
      if(deletedCount == 0){
        throw CouldNotDeleteNote();
      }
+     else{
+       _notes.removeWhere((note) => note.id == id);
+       _notesStreamController.add(_notes);
+     }
    }
 
    Future <DatabaseNote> createNote({required DatabaseUser owner}) async{
 
+     await _ensureDbIsOpen();
      // make sure user exists in the database with the current ID
      final db = _getDatabaseOrThrow();
 
@@ -79,11 +133,16 @@ import 'package:mynotes/services/crud/crud_exceptions.dart';
      });
 
      final note = DatabaseNote(id: noteId, userId: owner.id, text: text, isSynced: true);
+
+     _notes.add(note);
+     _notesStreamController.add(_notes);
+
      return note;
 
    }
 
    Future <DatabaseUser> getUser({required String email}) async{
+     await _ensureDbIsOpen();
      final db = _getDatabaseOrThrow();
      final result = await db.query(userTable,limit: 1,where: 'email = ?',whereArgs: [email.toLowerCase()]);
 
@@ -96,7 +155,7 @@ import 'package:mynotes/services/crud/crud_exceptions.dart';
    }
 
    Future <DatabaseUser> createUser({required String email}) async{
-
+     await _ensureDbIsOpen();
      final db = _getDatabaseOrThrow();
      final result = await db.query(userTable,limit: 1,where: 'email = ?',whereArgs: [email.toLowerCase()]);
 
@@ -111,6 +170,7 @@ import 'package:mynotes/services/crud/crud_exceptions.dart';
    }
 
    Future <void> deleteUser({required String email}) async {
+     await _ensureDbIsOpen();
      final db = _getDatabaseOrThrow();
      final deletedCount = db.delete(userTable,where: 'email = ?',whereArgs: [email.toLowerCase()]);
 
@@ -143,6 +203,14 @@ import 'package:mynotes/services/crud/crud_exceptions.dart';
       }
    }
 
+   Future <void> _ensureDbIsOpen() async {
+    try{
+      await open();
+    } on DatabaseAlreadyOpenException{
+    //  empty
+    }
+   }
+
    Future <void> open() async{
    if(_db != null){
      throw DatabaseAlreadyOpenException();
@@ -153,9 +221,11 @@ import 'package:mynotes/services/crud/crud_exceptions.dart';
      final dbPath = join(docsPath.path,dbName);
      final db = await openDatabase(dbPath);
      _db = db;
+     // create user table
      await db.execute(createUserTable);
+     // create note table
      await db.execute(createNoteTable);
-
+     await _cacheNotes();
    } on MissingPlatformDirectoryException{
      throw UnableToGetDocumentsDirectory();
    }
